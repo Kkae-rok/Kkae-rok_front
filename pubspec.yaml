@@ -1,0 +1,25 @@
+name: catchit
+description: "Drowsiness Detection Project"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  
+  # 필수 라이브러리 (졸음 감지 전용)
+  camera: ^0.11.0
+  google_mlkit_face_detection: ^0.11.0  # 얼굴 인식만 딱!
+  watch_connectivity: ^0.2.8
+  permission_handler: ^11.3.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
