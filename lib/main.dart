@@ -1,121 +1,125 @@
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 
-void main() {
+// 전역 변수로 카메라 목록 저장
+List<CameraDescription> _cameras = [];
+
+Future<void> main() async {
+  // 1. 플러터 엔진과 바인딩 확인 (비동기 실행 전 필수)
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    // 2. 기기에서 사용 가능한 카메라 목록 가져오기
+    _cameras = await availableCameras();
+  } on CameraException catch (e) {
+    print('카메라를 찾을 수 없습니다: ${e.code}, ${e.description}');
+  }
+  
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'flutter를 이용하여 휴대폰에 앱 설치왼료'),
+      title: 'CatchIt - 졸음 감지',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const CameraPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class CameraPage extends StatefulWidget {
+  const CameraPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<CameraPage> createState() => _CameraPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _CameraPageState extends State<CameraPage> {
+  CameraController? controller;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  // 카메라 초기화 로직
+  void _initializeCamera() async {
+    if (_cameras.isEmpty) return;
+
+    // 3. 전면 카메라 찾기 (졸음 감지용)
+    final frontCamera = _cameras.firstWhere(
+      (camera) => camera.lensDirection == CameraLensDirection.front,
+      orElse: () => _cameras.first,
+    );
+
+    // 4. 컨트롤러 설정 (해상도는 적당히 High로 설정 - 너무 높으면 M3라도 발열 생길 수 있음)
+    controller = CameraController(frontCamera, ResolutionPreset.high);
+
+    try {
+      await controller!.initialize();
+      if (!mounted) return;
+      setState(() {}); // 화면 갱신해서 카메라 띄우기
+    } catch (e) {
+      print('카메라 초기화 중 에러 발생: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    // 5. 앱 종료 시 카메라 자원 해제 (중요!)
+    controller?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+    // 카메라가 준비되지 않았을 때 하얀 화면 대신 로딩 표시
+    if (controller == null || !controller!.value.isInitialized) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text("카메라를 준비하고 있습니다..."),
+            ],
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      );
+    }
+
+    // 6. 카메라 미리보기 화면
+    return Scaffold(
+      appBar: AppBar(title: const Text("CatchIt 카메라 테스트")),
+      body: Stack(
+        children: [
+          // 전체 화면으로 카메라 미리보기 출력
+          SizedBox.expand(
+            child: CameraPreview(controller!),
+          ),
+          // 화면 위에 텍스트 표시
+          const Positioned(
+            bottom: 30,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                "얼굴을 비춰주세요",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  backgroundColor: Colors.black54,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
