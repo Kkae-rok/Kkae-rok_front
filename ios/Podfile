@@ -1,5 +1,5 @@
-# 1. 플랫폼 버전을 15.5로 상향하여 최신 라이브러리(FaceDetection)와 맞춥니다.
-platform :ios, '15.5'
+# Uncomment this line to define a global platform for your project
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -36,16 +36,8 @@ target 'Runner' do
   end
 end
 
-# 2. 강제로 버전을 고정했던 pod 'GoogleMLKit/FaceDetection', '8.0.0' 줄은 삭제했습니다.
-# 플러터 플러그인이 알아서 최적의 버전을 찾아오도록 내버려 둡니다.
-
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    
-    # 3. 모든 개별 라이브러리(Pods)들의 빌드 타겟을 15.5로 강제 통일합니다. (에러 방지 핵심)
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
-    end
   end
 end

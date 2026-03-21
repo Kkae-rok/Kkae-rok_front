@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CatchIt - 졸음 감지',
+      title: 'Kkae-rok - 졸음 감지',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const CameraPage(),
     );
