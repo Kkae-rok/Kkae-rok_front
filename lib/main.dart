@@ -14,11 +14,16 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: FaceDetectorPage());
+    return MaterialApp(
+      theme: ThemeData.dark(),
+      home: const FaceDetectorPage(),
+    );
   }
 }
 
 class FaceDetectorPage extends StatefulWidget {
+  const FaceDetectorPage({super.key});
+
   @override
   _FaceDetectorPageState createState() => _FaceDetectorPageState();
 }
@@ -27,18 +32,34 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   CameraController? _controller;
   bool _isBusy = false;
   List<Face> _faces = [];
+  String _currentStatus = "분석 대기 중...";
   
-  //  이미지 로직 반영: 실시간 수치 저장용 변수
-  double? _leftEyeProb;
-  double? _rightEyeProb;
-
-  final FaceDetector _faceDetector = FaceDetector(
-    options: FaceDetectorOptions(
-      enableClassification: true, // 눈 개폐 확률 계산을 위해 필수!
-      performanceMode: FaceDetectorMode.accurate,
-    ),
-  );
-
+  // 분석용 데이터 변수
+  double? _leftEye;
+  double? _rightEye;
+  double _pitch = 0.0;
+  double _mouthDist = 0.0;
+final FaceDetector _faceDetector = FaceDetector(
+  options: FaceDetectorOptions(
+    // 1. performanceMode: accurate (정확성 우선)
+    performanceMode: FaceDetectorMode.accurate,
+    
+    // 2. landmarkMode: all (눈, 입 위치 등 특징 감지)
+    enableLandmarks: true,
+    
+    // 3. contourMode: all (입술 윤곽선 감지)
+    enableContours: true,
+    
+    // 4. classificationMode: all (눈 뜨고 있는지 분류)
+    enableClassification: true,
+    
+    // 5. isTrackingEnabled: true (얼굴 추적 활성화)
+    enableTracking: true,
+    
+    // 6. minFaceSize: 기본값 0.1
+    minFaceSize: 0.1,
+  ),
+);
   @override
   void initState() {
     super.initState();
@@ -61,18 +82,62 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     if (inputImage != null) {
       final faces = await _faceDetector.processImage(inputImage);
       
-      if (mounted) {
+      if (mounted && faces.isNotEmpty) {
+        final face = faces.first;
+        
+        // 1. 눈 감음 수치 추출
+        _leftEye = face.leftEyeOpenProbability;
+        _rightEye = face.rightEyeOpenProbability;
+        
+        // 2. 고개 숙임 각도 (Pitch)
+        _pitch = face.headEulerAngleX ?? 0.0; 
+
+       // 3. 입 벌어짐 계산 (윤곽선 활용)
+final upperLipContour = face.contours[FaceContourType.upperLipTop];
+final lowerLipContour = face.contours[FaceContourType.lowerLipBottom];
+
+if (upperLipContour != null && lowerLipContour != null && 
+    upperLipContour.points.isNotEmpty && lowerLipContour.points.isNotEmpty) {
+  
+  // 입술 윤곽선의 중앙점 부근 좌표를 사용하여 거리를 측정합니다.
+  final upperY = upperLipContour.points.first.y;
+  final lowerY = lowerLipContour.points.first.y;
+  
+  _mouthDist = (lowerY - upperY).abs().toDouble();
+}
+
         setState(() {
           _faces = faces;
-          if (faces.isNotEmpty) {
-            // 예제코드인용
-            _leftEyeProb = faces.first.leftEyeOpenProbability;
-            _rightEyeProb = faces.first.rightEyeOpenProbability;
-          }
+          _currentStatus = _determineStatus(_leftEye, _rightEye, _pitch, _mouthDist);
         });
       }
     }
     _isBusy = false;
+  }
+
+  
+  String _determineStatus(double? left, double? right, double pitch, double mouth) {
+    bool isEyeClosed = (left ?? 1.0) < 0.3 && (right ?? 1.0) < 0.3; //
+    bool isMouthOpen = mouth > 5.0; // 하품 임계값 (조정 가능)
+
+    // CASE 3: 눈 감음 + 고개 숙임 (진짜 졸음)
+    if (isEyeClosed && pitch < -10.0) {
+      return "🔥 진짜 졸음 (위험!)";
+    }
+    // CASE 2: 고개 떨굼 (눈은 뜨고 있음)
+    if (pitch < -15.0 && !isEyeClosed) {
+      return "⚠️ 고개 떨굼 (주의)";
+    }
+    // CASE 1: 단순 눈 감음 (정면 응시 중)
+    if (isEyeClosed && pitch > -5.0) {
+      return "👁️ 단순 눈 감음";
+    }
+    // 하품 감지
+    if (isMouthOpen) {
+      return "😮 하품 감지됨";
+    }
+
+    return "✅ 정상 상태";
   }
 
   @override
@@ -82,24 +147,44 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("kkaerok - 졸음 감지")),
       body: Stack(
         fit: StackFit.expand,
         children: [
           CameraPreview(_controller!),
           CustomPaint(painter: FacePainter(_faces, _controller!.value.previewSize!)),
           
-          // 📊 수치 표시 UI 레이어
+          // 실시간 상태 알림창
           Positioned(
-            bottom: 50,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                _buildStatusCard("왼쪽 눈", _leftEyeProb),
-                const SizedBox(height: 10),
-                _buildStatusCard("오른쪽 눈", _rightEyeProb),
-              ],
+            top: 60,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: _currentStatus.contains("위험") ? Colors.red.withOpacity(0.8) : Colors.black87,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Text(
+                _currentStatus,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+
+          // 하단 상세 수치 표시
+          Positioned(
+            bottom: 40,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+              child: Text(
+                "눈: ${(_leftEye ?? 0).toStringAsFixed(2)} | Pitch: ${_pitch.toStringAsFixed(1)}° | 입: ${_mouthDist.toStringAsFixed(1)}",
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
         ],
@@ -107,27 +192,6 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     );
   }
 
-  // 수치를 예쁘게 보여주는 위젯
-  Widget _buildStatusCard(String title, double? value) {
-    if (value == null) return Container();
-    
-    //  0~ 1 사이 수치 중 0.1보다 작으면 눈 감음으로 판단
-    bool isClosed = value < 0.1; 
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: isClosed ? Colors.red.withOpacity(0.8) : Colors.black54,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        "$title: ${value.toStringAsFixed(2)} (${isClosed ? "감았음 ⚠️" : "뜸"})",
-        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  // (이전과 동일한 변환 로직 및 Painter 생략 - 실제 코드에는 포함됨)
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     final sensorOrientation = _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front).sensorOrientation;
     final inputImageMetadata = InputImageMetadata(
@@ -138,6 +202,13 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     );
     return InputImage.fromBytes(bytes: image.planes[0].bytes, metadata: inputImageMetadata);
   }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _faceDetector.close();
+    super.dispose();
+  }
 }
 
 class FacePainter extends CustomPainter {
@@ -147,7 +218,7 @@ class FacePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 3.0..color = Colors.greenAccent;
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 2.0..color = Colors.greenAccent;
     for (var face in faces) {
       final double scaleX = size.width / imageSize.height;
       final double scaleY = size.height / imageSize.width;
