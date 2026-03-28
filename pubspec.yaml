@@ -11,7 +11,6 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   
-  # 필수 라이브러리 (졸음 감지 전용)
   camera: ^0.11.0
   google_mlkit_face_detection: ^0.11.0  # 얼굴 인식만 딱!
   watch_connectivity: ^0.2.8
