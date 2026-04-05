@@ -1,7 +1,13 @@
 PODS:
+  - audioplayers_darwin (0.0.1):
+    - Flutter
   - camera_avfoundation (0.0.1):
     - Flutter
+  - device_info_plus (0.0.1):
+    - Flutter
   - Flutter (1.0.0)
+  - flutter_local_notifications (0.0.1):
+    - Flutter
   - google_mlkit_commons (0.8.1):
     - Flutter
     - MLKitVision
@@ -61,15 +67,21 @@ PODS:
   - permission_handler_apple (9.3.0):
     - Flutter
   - PromisesObjC (2.4.0)
+  - vibration (1.7.5):
+    - Flutter
   - watch_connectivity (0.0.1):
     - Flutter
 
 DEPENDENCIES:
+  - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/ios`)
   - camera_avfoundation (from `.symlinks/plugins/camera_avfoundation/ios`)
+  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - Flutter (from `Flutter`)
+  - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
   - google_mlkit_face_detection (from `.symlinks/plugins/google_mlkit_face_detection/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - vibration (from `.symlinks/plugins/vibration/ios`)
   - watch_connectivity (from `.symlinks/plugins/watch_connectivity/ios`)
 
 SPEC REPOS:
@@ -88,22 +100,33 @@ SPEC REPOS:
     - PromisesObjC
 
 EXTERNAL SOURCES:
+  audioplayers_darwin:
+    :path: ".symlinks/plugins/audioplayers_darwin/ios"
   camera_avfoundation:
     :path: ".symlinks/plugins/camera_avfoundation/ios"
+  device_info_plus:
+    :path: ".symlinks/plugins/device_info_plus/ios"
   Flutter:
     :path: Flutter
+  flutter_local_notifications:
+    :path: ".symlinks/plugins/flutter_local_notifications/ios"
   google_mlkit_commons:
     :path: ".symlinks/plugins/google_mlkit_commons/ios"
   google_mlkit_face_detection:
     :path: ".symlinks/plugins/google_mlkit_face_detection/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
+  vibration:
+    :path: ".symlinks/plugins/vibration/ios"
   watch_connectivity:
     :path: ".symlinks/plugins/watch_connectivity/ios"
 
 SPEC CHECKSUMS:
+  audioplayers_darwin: ccf9c770ee768abb07e26d90af093f7bab1c12ab
   camera_avfoundation: 5675ca25298b6f81fa0a325188e7df62cc217741
+  device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_local_notifications: ad39620c743ea4c15127860f4b5641649a988100
   google_mlkit_commons: 414fc36ac51758c806381de33a1d148d2ba71ce4
   google_mlkit_face_detection: d782e03ecc0b87ab828ab41ed6a865b04ac100f4
   GoogleDataTransport: 6c09b596d841063d76d4288cc2d2f42cc36e1e2a
@@ -119,6 +142,7 @@ SPEC CHECKSUMS:
   nanopb: 438bc412db1928dac798aa6fd75726007be04262
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  vibration: 8e2f50fc35bb736f9eecb7dd9f7047fbb6a6e888
   watch_connectivity: 208552a93286b3307a5359212a6bcaa44c4deaec
 
 PODFILE CHECKSUM: 53a6aebc29ccee84c41f92f409fc20cd4ca011f1

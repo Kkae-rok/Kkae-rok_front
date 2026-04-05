@@ -11,10 +11,19 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   
+  # 카메라 및 AI 관련
   camera: ^0.11.0
-  google_mlkit_face_detection: ^0.11.0  # 얼굴 인식만 딱!
+  google_mlkit_face_detection: ^0.11.0
+  
+  # 권한 및 워치 연결
   watch_connectivity: ^0.2.8
   permission_handler: ^11.3.1
+  
+  # 알림 및 로컬 알림 패키지
+  audioplayers: ^5.2.1
+  vibration: ^2.0.1
+  flutter_local_notifications: ^17.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -22,3 +31,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # assets 설정 (중복 제거 및 들여쓰기 교정)
+  assets:  
+    - assets/radar1.mp3
