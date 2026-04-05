@@ -13,14 +13,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _cameras = await availableCameras();
 
-  // 1. 시스템 알림 초기화
-  const initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initializationSettingsIOS = DarwinInitializationSettings();
-  const initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-    iOS: initializationSettingsIOS,
+  // 1. 알림 초기화 및 iOS 권한 요청
+  const initializationSettingsIOS = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
   );
-  
+  const initializationSettings = InitializationSettings(iOS: initializationSettingsIOS);
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
   runApp(const MyApp());
@@ -57,12 +56,16 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isAlerting = false; 
-  DateTime? _lastNotificationTime; // 알림 쿨타임용 변수
+  DateTime? _lastNotificationTime;
 
+  // ML Kit 옵션: 반드시 Landmarks와 Contours가 켜져 있어야 합니다.
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
       performanceMode: FaceDetectorMode.accurate,
-      enableClassification: true,
+      enableLandmarks: true,
+      enableContours: true,       
+      enableClassification: true, 
+      enableTracking: true,
     ),
   );
 
@@ -73,19 +76,10 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   }
 
   void _initializeCamera() async {
-    final frontCamera = _cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front, 
-      orElse: () => _cameras.first
-    );
+    final frontCamera = _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front, orElse: () => _cameras.first);
     _controller = CameraController(frontCamera, ResolutionPreset.medium, enableAudio: false);
-    
-    try {
-      await _controller?.initialize();
-      _controller?.startImageStream(_processCameraImage);
-    } catch (e) {
-      debugPrint("카메라 초기화 실패: $e");
-    }
-    
+    await _controller?.initialize();
+    _controller?.startImageStream(_processCameraImage);
     if (mounted) setState(() {});
   }
 
@@ -101,12 +95,14 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
         final face = faces.first;
         _leftEye = face.leftEyeOpenProbability;
         _rightEye = face.rightEyeOpenProbability;
-        _pitch = face.headEulerAngleX ?? 0.0; 
+        _pitch = (face.headEulerAngleX ?? 0.0).toDouble(); 
 
-        final upperLip = face.contours[FaceContourType.upperLipTop];
-        final lowerLip = face.contours[FaceContourType.lowerLipBottom];
-        if (upperLip != null && lowerLip != null && upperLip.points.isNotEmpty && lowerLip.points.isNotEmpty) {
-          _mouthDist = (lowerLip.points.first.y - upperLip.points.first.y).abs().toDouble();
+        final upper = face.contours[FaceContourType.upperLipTop];
+        final lower = face.contours[FaceContourType.lowerLipBottom];
+        if (upper != null && lower != null && upper.points.isNotEmpty && lower.points.isNotEmpty) {
+          final upperY = upper.points[upper.points.length ~/ 2].y;
+          final lowerY = lower.points[lower.points.length ~/ 2].y;
+          _mouthDist = (lowerY - upperY).abs().toDouble();
         }
 
         setState(() {
@@ -118,116 +114,92 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     _isBusy = false;
   }
 
+  // 🍎 핵심: 고개 숙임 감지 및 경고 트리거
   String _determineStatus(double? left, double? right, double pitch, double mouth) {
     bool isEyeClosed = (left ?? 1.0) < 0.25 && (right ?? 1.0) < 0.25;
-    bool isMouthOpen = mouth > 45.0;
+    bool isMouthOpen = mouth > 40.0;
 
-    if (isEyeClosed && pitch < -10.0) {
-      _startAlert(); 
+    // [CASE 4] 진짜 졸음 (눈 감음 + 고개 숙임)
+    // 숙임 각도를 -10에서 -8로 조금 더 예민하게 잡았습니다.
+    if (isEyeClosed && pitch < -8.0) {
+      _startAlert(); // 👈 여기서 소리/진동/알림이 터집니다!
       return "🔥 진짜 졸음 (위험!)";
-    } else {
-      _stopAlert(); 
-      if (pitch < -18.0) return "⚠️ 고개 떨굼 (주의)";
-      if (pitch > 30) return "⚠️ 고개 wjwcla (주의)";
-      if (isMouthOpen) return "😮 하품 감지됨";
-      if (isEyeClosed) return "👁️ 눈 감음";
-      return "✅ 정상 상태";
+    } 
+
+    // [추가] 눈은 뜨고 있지만 고개를 심하게 떨굴 때도 경고 (CASE 2 확장)
+    if (pitch < -15.0) {
+      _startAlert(); 
+      return "⚠️ 고개 떨굼 (위험!)";
     }
+
+    // 정상 범위로 돌아오면 알림 즉시 정지
+    _stopAlert(); 
+
+    if (pitch > 25.0) return "⚠️ 고개 뒤로 (주의)";
+    if (isMouthOpen) return "😮 하품 감지됨";
+    if (isEyeClosed) return "👁️ 단순 눈 감음";
+
+    return "✅ 정상 상태";
   }
 
-  Future<void> _showSystemNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'drowsy_id', '졸음알림', 
-      importance: Importance.max, 
-      priority: Priority.high
-    );
-    const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: true);
-    const platformDetails = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await flutterLocalNotificationsPlugin.show(
-      0, 
-      '🚨 졸음 감지!', 
-      '지금은 2795년 입니다. 일어나세요!', 
-      platformDetails
-    );
-  }
-
-  // --- 핵심: 안정적인 알림 및 소리 재생 로직 ---
   void _startAlert() async {
-    if (_isAlerting) return; // 이미 알림 중이면 중단
-    _isAlerting = true;
+    if (_isAlerting) return;
+    setState(() => _isAlerting = true);
 
-    // 1. 시스템 알림 쿨타임 (10초에 한 번만 뜨게 설정)
+    // 1. 푸시 알림
     final now = DateTime.now();
-    if (_lastNotificationTime == null || now.difference(_lastNotificationTime!).inSeconds > 10) {
-      _showSystemNotification();
+    if (_lastNotificationTime == null || now.difference(_lastNotificationTime!).inSeconds > 8) {
+      const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: true);
+      await flutterLocalNotificationsPlugin.show(0, '🚨 졸음 위험!', ' 지금은 2795년 당신은 잠들었습니다.!', const NotificationDetails(iOS: iosDetails));
       _lastNotificationTime = now;
     }
 
-    // 2. 오디오 버퍼 초기화 후 재생 (소리 끊김 방지)
-    await _audioPlayer.stop(); // 이전 상태가 있다면 정지
+    // 2. 소리 재생 (radar1.mp3)
     await _audioPlayer.setReleaseMode(ReleaseMode.loop); 
-    await _audioPlayer.play(AssetSource('radar1.mp3'), volume: 1.0);
+    await _audioPlayer.play(AssetSource('radar1.mp3'));
 
-    // 3. 진동 시작
+    // 3. 진동 가동
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.vibrate(pattern: [500, 1000], repeat: 0); 
     }
   }
 
-  void _stopAlert() async {
+  void _stopAlert() {
     if (!_isAlerting) return; 
-    _isAlerting = false;
-
-    await _audioPlayer.stop(); // 소리 즉시 중단
-    Vibration.cancel(); // 진동 즉시 중단
+    setState(() => _isAlerting = false);
+    _audioPlayer.stop();
+    Vibration.cancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
+    if (_controller == null || !_controller!.value.isInitialized) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
           CameraPreview(_controller!),
-          CustomPaint(painter: FacePainter(_faces, _controller!.value.previewSize!)),
-          
-          // 상단 상태 안내 바
+          // 상단 경고창 (빨간색 애니메이션 적용)
           Positioned(
             top: 60, left: 20, right: 20,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(25),
               decoration: BoxDecoration(
-                color: _isAlerting 
-                    ? Colors.red.withValues(alpha: 0.9) 
-                    : Colors.black87.withValues(alpha: 0.7),
+                color: _isAlerting ? Colors.red.withOpacity(0.9) : Colors.black87.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: _isAlerting ? [const BoxShadow(color: Colors.redAccent, blurRadius: 15)] : [],
+                boxShadow: _isAlerting ? [const BoxShadow(color: Colors.redAccent, blurRadius: 30, spreadRadius: 5)] : [],
               ),
-              child: Text(
-                _currentStatus, 
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white), 
-                textAlign: TextAlign.center
-              ),
+              child: Text(_currentStatus, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
             ),
           ),
-
-          // 하단 세부 수치 정보
+          // 하단 실시간 수치 데이터
           Positioned(
             bottom: 40, left: 20, right: 20,
             child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(15)),
-              child: Text(
-                "눈 감음: ${(_leftEye ?? 0).toStringAsFixed(2)} | 고개: ${_pitch.toStringAsFixed(1)}°",
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(15)),
+              child: Text("눈: ${(_leftEye ?? 0.0).toStringAsFixed(2)}| 고개각도: ${_pitch.toStringAsFixed(1)}° | 입: ${_mouthDist.toStringAsFixed(1)}", style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
             ),
           ),
         ],
@@ -237,52 +209,20 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     final sensorOrientation = _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front).sensorOrientation;
-    
     final inputImageMetadata = InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
       rotation: InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation90deg,
       format: InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.bgra8888,
       bytesPerRow: image.planes[0].bytesPerRow,
     );
-    
     return InputImage.fromBytes(bytes: image.planes[0].bytes, metadata: inputImageMetadata);
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
-    _controller?.stopImageStream();
     _controller?.dispose();
     _faceDetector.close();
     super.dispose();
   }
-}
-
-class FacePainter extends CustomPainter {
-  final List<Face> faces;
-  final Size imageSize;
-  FacePainter(this.faces, this.imageSize);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..color = Colors.greenAccent;
-
-    for (var face in faces) {
-      final double scaleX = size.width / imageSize.height;
-      final double scaleY = size.height / imageSize.width;
-      
-      final rect = Rect.fromLTRB(
-        size.width - (face.boundingBox.right * scaleX),
-        face.boundingBox.top * scaleY,
-        size.width - (face.boundingBox.left * scaleX),
-        face.boundingBox.bottom * scaleY,
-      );
-      canvas.drawRect(rect, paint);
-    }
-  }
-  @override
-  bool shouldRepaint(FacePainter oldDelegate) => oldDelegate.faces != faces;
 }

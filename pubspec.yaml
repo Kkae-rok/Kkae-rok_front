@@ -28,6 +28,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -35,3 +36,4 @@ flutter:
   # assets 설정 (중복 제거 및 들여쓰기 교정)
   assets:  
     - assets/radar1.mp3
+    - assets/깨록.png
