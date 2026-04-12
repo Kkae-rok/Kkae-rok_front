@@ -13,7 +13,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _cameras = await availableCameras();
 
-  // 1. 알림 초기화 및 iOS 권한 요청
   const initializationSettingsIOS = DarwinInitializationSettings(
     requestAlertPermission: true,
     requestBadgePermission: true,
@@ -56,9 +55,12 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isAlerting = false; 
+  bool _isVibrating = false;
   DateTime? _lastNotificationTime;
 
-  // ML Kit 옵션: 반드시 Landmarks와 Contours가 켜져 있어야 합니다.
+  // 🍎 5초 타이머 변수
+  Timer? _eyeCloseTimer;
+
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
       performanceMode: FaceDetectorMode.accurate,
@@ -100,9 +102,9 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
         final upper = face.contours[FaceContourType.upperLipTop];
         final lower = face.contours[FaceContourType.lowerLipBottom];
         if (upper != null && lower != null && upper.points.isNotEmpty && lower.points.isNotEmpty) {
-          final upperY = upper.points[upper.points.length ~/ 2].y;
-          final lowerY = lower.points[lower.points.length ~/ 2].y;
-          _mouthDist = (lowerY - upperY).abs().toDouble();
+          final upperCenter = upper.points[upper.points.length ~/ 2];
+          final lowerCenter = lower.points[lower.points.length ~/ 2];
+          _mouthDist = (lowerCenter.y - upperCenter.y).abs().toDouble();
         }
 
         setState(() {
@@ -114,59 +116,82 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     _isBusy = false;
   }
 
-  // 🍎 핵심: 고개 숙임 감지 및 경고 트리거
+  // 🍎 5초 지연 로직이 포함된 상태 판단 함수
   String _determineStatus(double? left, double? right, double pitch, double mouth) {
     bool isEyeClosed = (left ?? 1.0) < 0.25 && (right ?? 1.0) < 0.25;
     bool isMouthOpen = mouth > 40.0;
 
-    // [CASE 4] 진짜 졸음 (눈 감음 + 고개 숙임)
-    // 숙임 각도를 -10에서 -8로 조금 더 예민하게 잡았습니다.
+    // [CASE 4] 진짜 졸음 (눈 감음 + 고개 숙임) -> 즉시 풀 알림!
     if (isEyeClosed && pitch < -8.0) {
-      _startAlert(); // 👈 여기서 소리/진동/알림이 터집니다!
-      return "🔥 진짜 졸음 (위험!)";
+      _eyeCloseTimer?.cancel(); // 지연 타이머가 돌고 있다면 취소
+      _startAlert(fullAlert: true); 
+      return "🔥 진짜 졸음!! 일어나요!";
     } 
 
-    // [추가] 눈은 뜨고 있지만 고개를 심하게 떨굴 때도 경고 (CASE 2 확장)
+    // [CASE 2] 고개 떨굼 -> 즉시 풀 알림!
     if (pitch < -15.0) {
-      _startAlert(); 
-      return "⚠️ 고개 떨굼 (위험!)";
+      _eyeCloseTimer?.cancel();
+      _startAlert(fullAlert: true); 
+      return "⚠️ 고개 떨구면 목 아파요!";
     }
 
-    // 정상 범위로 돌아오면 알림 즉시 정지
+    // [CASE 1] 단순 눈 감음 (5초 대기 로직)
+    if (isEyeClosed && pitch > -5.0) {
+      // 이미 알림 중이 아니고, 타이머가 돌고 있지 않을 때만 타이머 시작
+      if (!_isAlerting && (_eyeCloseTimer == null || !_eyeCloseTimer!.isActive)) {
+        _eyeCloseTimer = Timer(const Duration(seconds: 5), () {
+          _startAlert(fullAlert: false); // 5초 경과 시 진동 시작
+        });
+      }
+      return "👁️ 눈을 감았어요! ";
+    }
+
+    // [정상 상태] 모든 타이머와 알림 정지
+    _eyeCloseTimer?.cancel(); 
     _stopAlert(); 
 
-    if (pitch > 25.0) return "⚠️ 고개 뒤로 (주의)";
-    if (isMouthOpen) return "😮 하품 감지됨";
-    if (isEyeClosed) return "👁️ 단순 눈 감음";
+    if (pitch > 25.0) return "⚠️ 고개 뒤로하면 목아파요!";
+    if (isMouthOpen) return "😮 하품 하지마세요!";
 
-    return "✅ 정상 상태";
+    return "✅ 공부 잘하고있어요!";
   }
 
-  void _startAlert() async {
-    if (_isAlerting) return;
+  void _startAlert({required bool fullAlert}) async {
+    if (_isVibrating && fullAlert == (_audioPlayer.state == PlayerState.playing)) return;
+    
+    _isVibrating = true;
     setState(() => _isAlerting = true);
 
-    // 1. 푸시 알림
-    final now = DateTime.now();
-    if (_lastNotificationTime == null || now.difference(_lastNotificationTime!).inSeconds > 8) {
-      const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: true);
-      await flutterLocalNotificationsPlugin.show(0, '🚨 졸음 위험!', ' 지금은 2795년 당신은 잠들었습니다.!', const NotificationDetails(iOS: iosDetails));
-      _lastNotificationTime = now;
+    if (fullAlert) {
+      // 사이렌 + 푸시
+      final now = DateTime.now();
+      if (_lastNotificationTime == null || now.difference(_lastNotificationTime!).inSeconds > 8) {
+        const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: true);
+        await flutterLocalNotificationsPlugin.show(
+          0, '🚨 졸음 위험!', '지금은 2795년 당신은 잠들었습니다.!', 
+          const NotificationDetails(iOS: iosDetails)
+        );
+        _lastNotificationTime = now;
+      }
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop); 
+      await _audioPlayer.play(AssetSource('radar1.mp3'));
+    } else {
+      await _audioPlayer.stop(); // 단순 진동 모드에선 소리 끔
     }
 
-    // 2. 소리 재생 (radar1.mp3)
-    await _audioPlayer.setReleaseMode(ReleaseMode.loop); 
-    await _audioPlayer.play(AssetSource('radar1.mp3'));
-
-    // 3. 진동 가동
+    // 진동 패턴 (직접 설정 가능)
     if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(pattern: [500, 1000], repeat: 0); 
+      Vibration.vibrate(pattern: [0, 500, 1000, 500], repeat: -1); 
     }
   }
 
   void _stopAlert() {
-    if (!_isAlerting) return; 
-    setState(() => _isAlerting = false);
+    if (!_isAlerting && !_isVibrating) return; 
+    
+    setState(() {
+      _isAlerting = false;
+      _isVibrating = false;
+    });
     _audioPlayer.stop();
     Vibration.cancel();
   }
@@ -179,7 +204,6 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
         fit: StackFit.expand,
         children: [
           CameraPreview(_controller!),
-          // 상단 경고창 (빨간색 애니메이션 적용)
           Positioned(
             top: 60, left: 20, right: 20,
             child: AnimatedContainer(
@@ -188,18 +212,21 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
               decoration: BoxDecoration(
                 color: _isAlerting ? Colors.red.withOpacity(0.9) : Colors.black87.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: _isAlerting ? [const BoxShadow(color: Colors.redAccent, blurRadius: 30, spreadRadius: 5)] : [],
+                boxShadow: _isAlerting ? [const BoxShadow(color: Colors.redAccent, blurRadius: 30)] : [],
               ),
               child: Text(_currentStatus, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
             ),
           ),
-          // 하단 실시간 수치 데이터
           Positioned(
             bottom: 40, left: 20, right: 20,
             child: Container(
               padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(15)),
-              child: Text("눈: ${(_leftEye ?? 0.0).toStringAsFixed(2)}| 고개각도: ${_pitch.toStringAsFixed(1)}° | 입: ${_mouthDist.toStringAsFixed(1)}", style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
+              child: Text(
+                "눈: ${(_leftEye ?? 0.0).toStringAsFixed(2)} | 고개: ${_pitch.toStringAsFixed(1)}° | 입: ${_mouthDist.toStringAsFixed(1)}", 
+                style: const TextStyle(color: Colors.white, fontSize: 14), 
+                textAlign: TextAlign.center
+              ),
             ),
           ),
         ],
@@ -220,6 +247,7 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   @override
   void dispose() {
+    _eyeCloseTimer?.cancel();
     _audioPlayer.dispose();
     _controller?.dispose();
     _faceDetector.close();
