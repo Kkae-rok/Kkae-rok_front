@@ -1,7 +1,7 @@
-# Uncomment this line to define a global platform for your project
-platform :ios, '15.0'
+# 🍎 1. 최신 MLKit와 Firebase 호환을 위해 최소 버전을 15.0으로 고정
+platform :ios, '15.5'
 
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+# CocoaPods 분석 비활성화 (빌드 속도 향상)
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -29,15 +29,28 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
-
+  # 🍎 Flutter 관련 모든 Pod 설치
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end
 end
 
+# 🍎 [중요] 모든 마무리 작업을 하나의 블록으로 통합 (중복 선언 해결)
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # 1. 모든 개별 라이브러리의 타겟을 15.0으로 강제 통일 (버전 에러 방지)
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      
+      # 2. M3 맥북(Apple Silicon) 시뮬레이터 빌드 호환성 설정
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+      
+      # 3. 비트코드 비활성화 (최신 라이브러리 필수 사항)
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+    end
   end
 end

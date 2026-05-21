@@ -26,12 +26,40 @@
     <string>$(FLUTTER_BUILD_NUMBER)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
-    
+
+    <!-- 🍎 구글 로그인을 위한 URL 스키마 설정 (네이버, 카카오 삭제 완료) -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.533714174060-r6q77e9b34nuc3i56vskj75ki4k0u47j</string>
+            </array>
+        </dict>
+    </array>
+
+    <key>GIDClientID</key>
+    <string>533714174060-r6q77e9b34nuc3i56vskj75ki4k0u47j.apps.googleusercontent.com</string>
+
     <key>UIBackgroundModes</key>
     <array>
-    <string>fetch</string>
-    <string>remote-notification</string>
+        <string>fetch</string>
+        <string>remote-notification</string>
     </array>
+
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>http</string>
+        <string>https</string>
+    </array>
+
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
 
     <key>NSCameraUsageDescription</key>
     <string>졸음 감지를 위해 카메라 권한이 필요합니다.</string>
@@ -44,6 +72,7 @@
     <string>LaunchScreen</string>
     <key>UIMainStoryboardFile</key>
     <string>Main</string>
+    
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>

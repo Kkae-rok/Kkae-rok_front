@@ -11,18 +11,31 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   
-  # 카메라 및 AI 관련
+  # 🍎 카메라 및 AI 관련
   camera: ^0.11.0
-  google_mlkit_face_detection: ^0.11.0
+  google_mlkit_face_detection: ^0.13.0
+  google_mlkit_commons: ^0.10.0
   
-  # 권한 및 워치 연결
+  # 🍎 권한 및 워치 연결
   watch_connectivity: ^0.2.8
   permission_handler: ^11.3.1
   
-  # 알림 및 로컬 알림 패키지
+  # 🍎 알림 및 로컬 알림 패키지
   audioplayers: ^5.2.1
   vibration: ^2.0.1
   flutter_local_notifications: ^17.2.2
+
+  # 🍎 소셜 로그인
+  kakao_flutter_sdk_user: ^2.0.0+1
+  flutter_naver_login: ^2.1.1
+  google_sign_in: ^6.1.6  # 👈 버전 호환성을 위해 ^ 기호를 추가했습니다.
+  
+  # 🍎 파이어베이스 (DB, 로그인 등)
+  firebase_core: ^3.1.1
+  firebase_auth: ^5.1.1
+  cloud_firestore: ^5.6.12
+  shared_preferences: ^2.5.5
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -33,7 +46,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # assets 설정 (중복 제거 및 들여쓰기 교정)
   assets:  
     - assets/radar1.mp3
     - assets/깨록.png
+    - assets/꺠록3.png    
+    - assets/kakao_login.png
+    - assets/naver_login.png
+    - assets/google_login.png
+    - assets/detect.png
+    - assets/record.png
+    - assets/stats.png
+    - assets/alarm.png
+    - assets/background.png

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "533714174060",
+    "project_id": "kkaerok-89e28",
+    "storage_bucket": "kkaerok-89e28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:533714174060:android:c69852bc6563146001d849",
+        "android_client_info": {
+          "package_name": "com.example.catchit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCn-F1ayiALQGkyf4MyrZz6pnKbrshmco"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
