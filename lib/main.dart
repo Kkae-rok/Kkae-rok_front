@@ -6,7 +6,7 @@ import 'login_page.dart';
 import 'package:firebase_core/firebase_core.dart'; 
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'firebase_options.dart'; 
-
+ //완성
 late List<CameraDescription> _cameras;
 
 Future<void> main() async {
