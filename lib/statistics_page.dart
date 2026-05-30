@@ -29,9 +29,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   Map<String, DailyRecord> _dailyRecords = {};
   bool _isLoading = true;
 
-
   int _chartPeriod = 6; 
-
   final List<int> _periodOptions = [1, 2, 3, 6, 12]; 
   DateTime _chartEndMonth = DateTime.now(); 
 
@@ -49,40 +47,58 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final historySnapshot = await FirebaseFirestore.instance
+          .collection('study_history')
+          .where('uid', isEqualTo: user.uid)
+          .get();
+
+      final timersSnapshot = await FirebaseFirestore.instance
           .collection('timers')
           .where('uid', isEqualTo: user.uid)
           .get();
 
       Map<String, DailyRecord> loadedData = {};
       
-      for (var doc in snapshot.docs) {
-        var data = doc.data();
-        String dateKey = data['lastUpdatedDate'] ?? ''; 
-        int seconds = data['seconds'] ?? 0;             
-        
-        DateTime? createdAt;
-        if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
-          createdAt = (data['createdAt'] as Timestamp).toDate();
-        }
-
-        if (dateKey.isNotEmpty) {
-          if (!loadedData.containsKey(dateKey)) {
-            loadedData[dateKey] = DailyRecord();
-          }
-          loadedData[dateKey]!.totalSeconds += seconds;
-
-          if (createdAt != null) {
-            if (loadedData[dateKey]!.startTime == null || createdAt.isBefore(loadedData[dateKey]!.startTime!)) {
-              loadedData[dateKey]!.startTime = createdAt;
+      void processDocs(QuerySnapshot snapshot) {
+        for (var doc in snapshot.docs) {
+          var data = doc.data() as Map<String, dynamic>;
+          String dateKey = data['date'] ?? data['lastUpdatedDate'] ?? ''; 
+          
+          int seconds = 0;
+          if (data['seconds'] != null) {
+            if (data['seconds'] is num) {
+              seconds = (data['seconds'] as num).toInt();
+            } else if (data['seconds'] is String) {
+              seconds = int.tryParse(data['seconds']) ?? 0;
             }
-            DateTime calculatedEndTime = createdAt.add(Duration(seconds: seconds));
-            if (loadedData[dateKey]!.endTime == null || calculatedEndTime.isAfter(loadedData[dateKey]!.endTime!)) {
-              loadedData[dateKey]!.endTime = calculatedEndTime;
+          }
+          
+          DateTime? createdAt;
+          if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+            createdAt = (data['createdAt'] as Timestamp).toDate();
+          }
+
+          if (dateKey.isNotEmpty && seconds > 0) {
+            if (!loadedData.containsKey(dateKey)) {
+              loadedData[dateKey] = DailyRecord();
+            }
+            loadedData[dateKey]!.totalSeconds += seconds;
+
+            if (createdAt != null) {
+              if (loadedData[dateKey]!.startTime == null || createdAt.isBefore(loadedData[dateKey]!.startTime!)) {
+                loadedData[dateKey]!.startTime = createdAt;
+              }
+              DateTime calculatedEndTime = createdAt.add(Duration(seconds: seconds));
+              if (loadedData[dateKey]!.endTime == null || calculatedEndTime.isAfter(loadedData[dateKey]!.endTime!)) {
+                loadedData[dateKey]!.endTime = calculatedEndTime;
+              }
             }
           }
         }
       }
+
+      processDocs(historySnapshot);
+      processDocs(timersSnapshot);
 
       setState(() {
         _dailyRecords = loadedData; 
@@ -93,7 +109,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       setState(() => _isLoading = false);
     }
   }
-
 
   Future<void> _showPeriodPicker(BuildContext context) async {
     int tempIndex = _periodOptions.indexOf(_chartPeriod);
@@ -251,7 +266,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  
   Widget _buildCalendarPage() {
     return Column(
       children: [
@@ -284,7 +298,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     int s = totalSec % 60;
     String totalTimeStr = '${h.toString()}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 
-    
     DateTime? startTime = record?.startTime;
     DateTime? calculatedEndTime = startTime != null ? startTime.add(Duration(seconds: totalSec)) : null;
 
@@ -324,7 +337,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  
   Widget _buildMonthlyLineChartPage() {
     List<int> chartMinutes = [];
     List<String> chartLabels = [];
@@ -470,7 +482,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  
   Widget _buildTabs() {
     List<String> tabs = ['일간', '주간', '월간'];
     return Row(
@@ -561,6 +572,23 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 int studySec = _dailyRecords[DateFormat('yyyy-MM-dd').format(date)]?.totalSeconds ?? 0;
                 int studyMinutes = studySec ~/ 60;
 
+                Color dayTextColor;
+                Color timeTextColor;
+
+                if (isDaySelected || isWeekSelected) {
+                  // 선택된 날짜는 여전히 강조색
+                  dayTextColor = const Color(0xFFE57373);
+                  timeTextColor = const Color(0xFFE57373);
+                } else if (!isCurrentMonth) {
+                  // 지난달/다음달 날짜는 흐리게
+                  dayTextColor = Colors.grey.shade300;
+                  timeTextColor = Colors.transparent;
+                } else {
+                  // 💡 모든 날짜의 텍스트를 검은색/짙은 회색으로 통일!
+                  dayTextColor = Colors.black87;
+                  timeTextColor = Colors.black87;
+                }
+
                 return Expanded(
                   child: GestureDetector(
                     onTap: () {
@@ -573,9 +601,22 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('${date.day}', style: TextStyle(fontSize: 14, fontWeight: (isDaySelected || isWeekSelected) ? FontWeight.bold : FontWeight.w500, color: (isDaySelected || isWeekSelected) ? const Color(0xFFE57373) : isCurrentMonth ? Colors.black87 : Colors.grey.shade300)),
+                          Text(
+                            '${date.day}', 
+                            style: TextStyle(
+                              fontSize: 14, 
+                              fontWeight: (isDaySelected || isWeekSelected) ? FontWeight.bold : FontWeight.w500, 
+                              color: dayTextColor
+                            )
+                          ),
                           if (_selectedTab == 0 && studyMinutes > 0) 
-                            Text('${studyMinutes ~/ 60}:${(studyMinutes % 60).toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 9, color: Color(0xFFE57373))),
+                            Text(
+                              '${studyMinutes ~/ 60}:${(studyMinutes % 60).toString().padLeft(2, '0')}', 
+                              style: TextStyle(
+                                fontSize: 9, 
+                                color: timeTextColor
+                              )
+                            ),
                         ],
                       ),
                     ),
@@ -585,7 +626,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             ),
             if (_selectedTab == 1 && weeklyTotalSec > 0) ...[
               const SizedBox(height: 4),
-              Text('주간 누적: ${weeklyTotalSec ~/ 3600}H ${((weeklyTotalSec % 3600) ~/ 60).toString().padLeft(2, '0')}M', style: const TextStyle(fontSize: 10, color: Color(0xFFE57373), fontWeight: FontWeight.bold)),
+              Text('주간 누적: ${weeklyTotalSec ~/ 3600}H ${((weeklyTotalSec % 3600) ~/ 60).toString().padLeft(2, '0')}M', style: const TextStyle(fontSize: 10, color: Color.fromARGB(255, 0, 0, 0), fontWeight: FontWeight.bold)),
             ]
           ],
         ),
@@ -681,16 +722,25 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   Color _getHeatmapColor(int minutes) {
     if (minutes == 0) return Colors.transparent;
-    if (minutes < 180) return const Color(0xFFFFCDD2); 
-    if (minutes < 360) return const Color(0xFFEF9A9A); 
-    if (minutes < 540) return const Color(0xFFE57373); 
-    if (minutes < 720) return const Color(0xFFEF5350); 
-    return const Color(0xFFE53935); 
+    
+    // 0~3시간 미만: 매우 연한 분홍
+    if (minutes < 180) return const Color(0xFFFFEBEE); 
+    
+    // 3~6시간 미만: 연한 분홍
+    if (minutes < 360) return const Color(0xFFFFCDD2); 
+    
+    // 6~9시간 미만: 중간 분홍 (조금 더 연하게)
+    if (minutes < 540) return const Color(0xFFEF9A9A); 
+    
+    // 9~12시간 미만: 조금 더 진한 분홍 (기존보다 연하게)
+    if (minutes < 720) return const Color(0xFFE57373); 
+    
+    
+    return const Color(0xFFEF5350); 
   }
 
   bool _isSameDay(DateTime d1, DateTime d2) { return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day; }
 }
-
 
 class LineChartPainter extends CustomPainter {
   final List<int> minutes;

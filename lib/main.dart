@@ -1,25 +1,21 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'detector_page.dart'; 
 import 'login_page.dart';
 import 'package:firebase_core/firebase_core.dart'; 
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'firebase_options.dart'; 
- //완성
+
 late List<CameraDescription> _cameras;
 
 Future<void> main() async {
-
   WidgetsFlutterBinding.ensureInitialized();
   
- 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-KakaoSdk.init(nativeAppKey: '8ab593a60ed2e8755f91f0af8f5b307d');
-
+  KakaoSdk.init(nativeAppKey: '8ab593a60ed2e8755f91f0af8f5b307d');
   
   _cameras = await availableCameras();
   
@@ -28,18 +24,20 @@ KakaoSdk.init(nativeAppKey: '8ab593a60ed2e8755f91f0af8f5b307d');
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const SplashScreen(),
+      home: const SplashScreen(), // 🍎 정호님이 만든 스플래시 정상 작동!
     );
   }
 }
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
+  
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
@@ -65,8 +63,8 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            
-            Image.asset('assets/꺠록3.png', width: 400), 
+            // 🍎 아이폰에서 절대 깨지지 않도록 영문 패스로 바뀐 로고 이미지 배치
+            Image.asset('assets/logo.png', width: 400), 
             const SizedBox(height: 20),
             const Text(
               "깨록 - 당신의 공부 파트너", 

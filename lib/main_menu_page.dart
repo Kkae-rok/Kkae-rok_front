@@ -1,90 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'detector_page.dart'; 
 import 'record_page.dart';   
 import 'notification_settings_page.dart'; 
 import 'statistics_page.dart';
-import 'login_page.dart';
 
 class MainMenuPage extends StatelessWidget {
   final List<CameraDescription> cameras; 
   const MainMenuPage({super.key, required this.cameras});
 
-  Future<void> _handleLogout(BuildContext context) async {
-    bool? confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white, 
-        surfaceTintColor: Colors.white, 
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "로그아웃", 
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)
-        ),
-        content: const Text(
-          "정말 로그아웃 하시겠습니까?", 
-          style: TextStyle(color: Colors.black87)
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("취소", style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              "로그아웃", 
-              style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.bold)
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await FirebaseAuth.instance.signOut();
-        await GoogleSignIn().signOut();
-
-        if (context.mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => LoginPage(cameras: cameras)),
-          );
-        }
-      } catch (e) {
-        debugPrint("로그아웃 실패: $e");
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      extendBodyBehindAppBar: true, 
-      appBar: AppBar(
-        backgroundColor: Colors.transparent, 
-        elevation: 0,
-        leadingWidth: 100, 
-        leading: TextButton(
-          onPressed: () => _handleLogout(context),
-          child: const Text(
-            "로그아웃",
-            style: TextStyle(
-              color: Colors.black, 
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-            ),
-          ),
-        ),
-      ),
       body: Stack(
         fit: StackFit.expand, 
         children: [
-         
+          // 1층: 시계 모양 워터마크 배경
           Container(
             color: const Color(0xFFF8F9FA), 
             alignment: Alignment.center, 
@@ -92,14 +24,12 @@ class MainMenuPage extends StatelessWidget {
               'assets/background.png', 
               fit: BoxFit.contain, 
               width: MediaQuery.of(context).size.width * 0.85, 
-              
-              
               color: const Color(0xFFF8F9FA), 
               colorBlendMode: BlendMode.multiply, 
             ),
           ),
           
-          // 메인 메뉴 버튼
+          // 2층: 반투명 메인 메뉴 버튼들
           SafeArea( 
             child: Center(
               child: Padding(
@@ -112,7 +42,7 @@ class MainMenuPage extends StatelessWidget {
                       children: [
                         _buildMenuCard(
                           context,
-                          imagePath: 'assets/detect.png', 
+                          imagePath: 'assets/detect3.png', 
                           onTap: () {
                             Navigator.push(
                               context,
@@ -124,7 +54,7 @@ class MainMenuPage extends StatelessWidget {
                         ),
                         _buildMenuCard(
                           context,
-                          imagePath: 'assets/record.png', 
+                          imagePath: 'assets/record3.png', 
                           onTap: () {
                             Navigator.push(
                               context,
@@ -142,7 +72,7 @@ class MainMenuPage extends StatelessWidget {
                       children: [
                         _buildMenuCard(
                           context,
-                          imagePath: 'assets/stats.png', 
+                          imagePath: 'assets/stats3.png', 
                           onTap: () {
                             Navigator.push(
                               context,
@@ -154,12 +84,12 @@ class MainMenuPage extends StatelessWidget {
                         ),
                         _buildMenuCard(
                           context,
-                          imagePath: 'assets/alarm.png', 
+                          imagePath: 'assets/alarm3.png', 
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const NotificationSettingsPage(),
+                                builder: (context) => NotificationSettingsPage(cameras: cameras),
                               ),
                             );
                           },
@@ -177,25 +107,27 @@ class MainMenuPage extends StatelessWidget {
     );
   }
 
+  // 🍎 투명도를 0.5(50%)로 확 낮춰서 뒤가 잘 비치게 수정!
   Widget _buildMenuCard(BuildContext context, {required String imagePath, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 150,
-        height: 170,
+        width: 155, 
+        height: 175, 
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24), 
+          // 👇 이 숫자가 0.5로 변경되었습니다! (필요하면 0.3 처럼 더 낮추셔도 됩니다)
+          color: Colors.white.withOpacity(0.5), 
+          borderRadius: BorderRadius.circular(30), 
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04), 
+              color: Colors.black.withOpacity(0.02), 
               blurRadius: 15,
               spreadRadius: 2,
               offset: const Offset(0, 5),
             ),
           ],
         ),
-        padding: const EdgeInsets.all(15), 
+        padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20), 
         child: Image.asset(
           imagePath,
           fit: BoxFit.contain, 

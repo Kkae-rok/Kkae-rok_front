@@ -15,7 +15,7 @@ class FaceDetectorPage extends StatefulWidget {
   State<FaceDetectorPage> createState() => _FaceDetectorPageState();
 }
 
-class _FaceDetectorPageState extends State<FaceDetectorPage> {
+class _FaceDetectorPageState extends State<FaceDetectorPage> with SingleTickerProviderStateMixin {
   CameraController? _controller;
   bool _isBusy = false;
   String _currentStatus = "분석 대기 중...";
@@ -35,8 +35,10 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   bool _isVibrationSettingOn = true;
 
   DateTime? _lastNotificationTime;
-  Timer? _eyeCloseTimer;     // 일반 눈감기용 (5초)
-  Timer? _realDrowsyTimer;   // 숙임/졸음 체크용 (3초)
+  Timer? _eyeCloseTimer;     
+  Timer? _realDrowsyTimer;   
+
+  late AnimationController _blinkController;
 
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -51,6 +53,12 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   @override
   void initState() {
     super.initState();
+    
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
     _loadAlertSettings();
     _initNotifications(); 
     _initializeCamera();
@@ -93,62 +101,95 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   Future<void> _processCameraImage(CameraImage image) async {
     if (_isBusy) return;
     _isBusy = true;
+    
     final inputImage = _inputImageFromCameraImage(image);
     if (inputImage != null) {
       final faces = await _faceDetector.processImage(inputImage);
-      if (mounted && faces.isNotEmpty) {
-        final face = faces.first;
-        _leftEye = face.leftEyeOpenProbability;
-        _rightEye = face.rightEyeOpenProbability;
-        _pitch = (face.headEulerAngleX ?? 0.0).toDouble(); 
-        final upper = face.contours[FaceContourType.upperLipTop];
-        final lower = face.contours[FaceContourType.lowerLipBottom];
-        if (upper != null && lower != null && upper.points.isNotEmpty && lower.points.isNotEmpty) {
-          final upperCenter = upper.points[upper.points.length ~/ 2];
-          final lowerCenter = lower.points[lower.points.length ~/ 2];
-          _mouthDist = (lowerCenter.y - upperCenter.y).abs().toDouble();
+      
+      if (mounted) {
+        if (faces.length >= 2) {
+          setState(() {
+            _currentStatus = "👥 얼굴이 2명 이상이라 인식할 수 없어요!";
+          });
+          _eyeCloseTimer?.cancel();
+          _realDrowsyTimer?.cancel();
+          _stopAlert();
+        } 
+        else if (faces.length == 1) {
+          final face = faces.first;
+          _leftEye = face.leftEyeOpenProbability;
+          _rightEye = face.rightEyeOpenProbability;
+          _pitch = (face.headEulerAngleX ?? 0.0).toDouble(); 
+          
+          final upper = face.contours[FaceContourType.upperLipTop];
+          final lower = face.contours[FaceContourType.lowerLipBottom];
+          
+          if (upper != null && lower != null && upper.points.isNotEmpty && lower.points.isNotEmpty) {
+            final upperCenter = upper.points[upper.points.length ~/ 2];
+            final lowerCenter = lower.points[lower.points.length ~/ 2];
+            _mouthDist = (lowerCenter.y - upperCenter.y).abs().toDouble();
+          }
+          
+          setState(() {
+            _currentStatus = _determineStatus(_leftEye, _rightEye, _pitch, _mouthDist);
+          });
+        } 
+        else {
+          setState(() {
+            _currentStatus = "🚫 화면에서 얼굴을 찾을 수 없어요!";
+            _leftEye = 0.0;
+            _rightEye = 0.0;
+            _pitch = 0.0;
+            _mouthDist = 0.0;
+          });
+          _eyeCloseTimer?.cancel();
+          _realDrowsyTimer?.cancel();
+          _stopAlert();
         }
-        setState(() {
-          _currentStatus = _determineStatus(_leftEye, _rightEye, _pitch, _mouthDist);
-        });
       }
     }
     _isBusy = false;
   }
 
+
   String _determineStatus(double? left, double? right, double pitch, double mouth) {
     bool isEyeClosed = (left ?? 1.0) < 0.25 && (right ?? 1.0) < 0.25;
     bool isMouthOpen = mouth > 40.0;
 
-    // 고개 떨구기 상황 통합 (그냥 숙이든, 눈 감고 숙이든 3초 카운트)
-    // 눈을 감았으면서 고개를 약간 숙였거나, 고개를 아주 깊게 떨군 경우
-    if ((isEyeClosed && pitch < -8.0) || pitch < -15.0) {
+    
+    if (isEyeClosed && pitch < -8.0) {
       _eyeCloseTimer?.cancel(); // 일반 눈감기 타이머는 취소
-      
-      // 타이머가 돌고 있지 않다면 시작
       if (!_isAlerting && (_realDrowsyTimer == null || !_realDrowsyTimer!.isActive)) {
         _realDrowsyTimer = Timer(const Duration(seconds: 3), () {
-          _startAlert(fullAlert: true); // 3초 뒤에 알람 울림
+          _startAlert(fullAlert: true); 
         });
       }
-      return "🔥 고개 숙임/졸음 감지 중 (3초)...";
+      return "🔥 고개 숙임 / 졸음 감지 중...";
     } 
 
-    // 그냥 눈만 감은 경우 - 5초 카운트
-    if (isEyeClosed && pitch > -5.0) {
-      _realDrowsyTimer?.cancel(); // 고개 숙임 타이머는 취소
+    // 2. [단순 눈 감음] 고개는 똑바로 정면인데 눈만 감고 있을 때 (5초 카운트)
+    if (isEyeClosed && pitch >= -8.0) {
+      _realDrowsyTimer?.cancel(); // 고개 숙임 졸음 타이머는 취소
       if (!_isAlerting && (_eyeCloseTimer == null || !_eyeCloseTimer!.isActive)) {
         _eyeCloseTimer = Timer(const Duration(seconds: 5), () {
           _startAlert(fullAlert: false);
         });
       }
-      return "👁️ 눈을 감았어요!";
+      return "👁️ 눈을 감는 중...";
     }
 
-    // 정상 상태로 돌아오면 모든 타이머와 알람 중지
+    // 위험 상황(눈 감음)이 아니라면 타이머와 사이렌 알람을 즉시 꺼줍니다.
     _realDrowsyTimer?.cancel(); 
     _eyeCloseTimer?.cancel(); 
     _stopAlert(); 
+
+    // 3. [정상 숙임] 눈은 번쩍 떴는데 고개만 숙인 경우 (책 읽기, 필기 등 열공 모드)
+    if (!isEyeClosed && pitch < -8.0) {
+      if (pitch < -22.0) {
+        return "⚠️ 고개를 너무 숙이면 목에 무리가 가요!"; // 거북목 방지 보너스 경고창
+      }
+      return "📝 집중해서 공부를 하시는 중이시군요!";
+    }
 
     if (pitch > 25.0) return "⚠️ 고개 뒤로하면 목아파요!";
     if (isMouthOpen) return "😮 하품 하지마세요!";
@@ -157,6 +198,9 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
   }
 
   void _startAlert({required bool fullAlert}) async {
+    if (!_isAlerting) {
+      _blinkController.repeat(reverse: true);
+    }
     setState(() => _isAlerting = true);
 
     if (_isSoundSettingOn) {
@@ -182,6 +226,8 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   void _stopAlert() {
     if (!_isAlerting && !_isVibrating) return; 
+    
+    _blinkController.reset();
     setState(() {
       _isAlerting = false;
       _isVibrating = false;
@@ -209,19 +255,39 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
         fit: StackFit.expand,
         children: [
           CameraPreview(_controller!),
+          
           Positioned(
             top: 100, left: 20, right: 20,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(25),
-              decoration: BoxDecoration(
-                color: _isAlerting ? Colors.red.withOpacity(0.85) : Colors.black87.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: _isAlerting ? [const BoxShadow(color: Colors.redAccent, blurRadius: 30)] : [],
-              ),
-              child: Text(_currentStatus, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+            child: AnimatedBuilder(
+              animation: _blinkController,
+              builder: (context, child) {
+                return Container(
+                  padding: const EdgeInsets.all(25),
+                  decoration: BoxDecoration(
+                    color: _isAlerting 
+                        ? Color.lerp(Colors.red.withOpacity(0.9), Colors.red[900]!.withOpacity(0.9), _blinkController.value)
+                        : Colors.black87.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: _isAlerting 
+                        ? [BoxShadow(color: Colors.redAccent, blurRadius: 40 * (1 - _blinkController.value))] 
+                        : [],
+                  ),
+                  child: Text(
+                    _currentStatus, 
+                    style: TextStyle(
+                      fontSize: 24, 
+                      fontWeight: FontWeight.bold, 
+                      color: _isAlerting 
+                          ? (_blinkController.value > 0.5 ? Colors.yellowAccent : Colors.white)
+                          : Colors.white,
+                    ), 
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
             ),
           ),
+          
           Positioned(
             bottom: 40, left: 20, right: 20,
             child: Container(
@@ -235,7 +301,6 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     );
   }
 
-  
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     final sensorOrientation = widget.cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front).sensorOrientation;
     final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
@@ -250,6 +315,7 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
 
   @override
   void dispose() {
+    _blinkController.dispose(); 
     _eyeCloseTimer?.cancel();
     _realDrowsyTimer?.cancel(); 
     _audioPlayer.dispose();

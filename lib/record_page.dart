@@ -60,10 +60,33 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  // 🍎 앱 라이프사이클 감지 (백그라운드 이동 및 종료 대응 수정)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // 앱으로 다시 돌아왔을 때 날짜 체크 및 최신 데이터 로드
+      _loadTimersFromDB(); 
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      // 🚨 [핵심 추가] 사용자가 홈 화면으로 나가거나 앱을 완전히 종료(킬)할 때 타이머를 강제로 멈추고 DB에 저장합니다.
+      _stopAndSaveAllRunningTimers();
+    }
+  }
+
+  // 🚨 [새로 추가] 현재 작동 중인 모든 타이머를 중지하고 DB에 최종 시간을 즉시 저장하는 함수
+  Future<void> _stopAndSaveAllRunningTimers() async {
+    bool isUpdated = false;
+    for (var t in timers) {
+      if (t.isRunning) {
+        t.baseSeconds = t.currentSeconds; // 지나간 시간 합산
+        t.isRunning = false;
+        t.startTime = null;
+        await _saveTimerToDB(t); // DB에 즉시 업데이트 완료할 때까지 대기(await)
+        isUpdated = true;
+      }
+    }
+    if (isUpdated && mounted) {
       setState(() {});
+      _manageGlobalTimer(); // 화면 UI 및 글로벌 초시계 타이머 정지
     }
   }
 
@@ -90,14 +113,13 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
         var data = doc.data();
         
         int seconds = data['seconds'] ?? 0;
-        String lastUpdatedDate = data['lastUpdatedDate'] ?? '';
+        String lastUpdatedDate = data['lastUpdatedDate'] ?? data['date'] ?? '';
         
         bool isRunning = data['isRunning'] ?? false;
         DateTime? startTime;
         if (data['startTime'] != null) {
           startTime = DateTime.parse(data['startTime']);
         }
-        
         
         DateTime? dailyStartTime;
         if (data['dailyStartTime'] != null) {
@@ -110,7 +132,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
             'title': data['title'] ?? '이름 없음',
             'seconds': seconds,
             'date': lastUpdatedDate, 
-            'dailyStartTime': data['dailyStartTime'], // 🍎 아카이브에도 시작 시간 백업
+            'dailyStartTime': data['dailyStartTime'], 
             'color': data['color'],
             'createdAt': FieldValue.serverTimestamp(),
           });
@@ -125,6 +147,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
             'startTime': null,
             'dailyStartTime': null,
             'lastUpdatedDate': today,
+            'date': today,
           });
         }
 
@@ -152,12 +175,42 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
 
   Future<void> _saveTimerToDB(TimerData timer) async {
     try {
-      await FirebaseFirestore.instance.collection('timers').doc(timer.docId).update({
+      final todayStr = _getTodayString();
+      final docRef = FirebaseFirestore.instance.collection('timers').doc(timer.docId);
+      final docSnap = await docRef.get();
+      
+      if (docSnap.exists) {
+        final data = docSnap.data();
+        String dbLastDate = data?['lastUpdatedDate'] ?? data?['date'] ?? '';
+        int dbSeconds = (data?['seconds'] ?? 0).toInt();
+
+        if (dbLastDate.isNotEmpty && dbLastDate != todayStr && dbSeconds > 0) {
+          await FirebaseFirestore.instance.collection('study_history').add({
+            'uid': currentUser!.uid,
+            'title': data?['title'] ?? timer.title,
+            'seconds': dbSeconds,
+            'date': dbLastDate, 
+            'dailyStartTime': data?['dailyStartTime'],
+            'color': data?['color'],
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+          dbSeconds = 0;
+          timer.baseSeconds = 0;
+          if (timer.isRunning) {
+            timer.startTime = DateTime.now(); 
+          }
+          if (mounted) setState(() {});
+        }
+      }
+
+      await docRef.update({
         'seconds': timer.baseSeconds, 
         'isRunning': timer.isRunning,
         'startTime': timer.startTime?.toIso8601String(), 
-        'dailyStartTime': timer.dailyStartTime?.toIso8601String(), // 🍎 찐 시작 시간 저장
-        'lastUpdatedDate': _getTodayString(),
+        'dailyStartTime': timer.dailyStartTime?.toIso8601String(), 
+        'lastUpdatedDate': todayStr,
+        'date': todayStr,
       });
     } catch (e) {
       print("DB 저장 에러: $e");
