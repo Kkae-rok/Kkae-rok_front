@@ -11,26 +11,26 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   
-  # 🍎 카메라 및 AI 관련
+  # 카메라 및 AI 관련
   camera: ^0.11.0
   google_mlkit_face_detection: ^0.13.0
   google_mlkit_commons: ^0.10.0
   
-  # 🍎 권한 및 워치 연결
+  # 권한 및 워치 연결
   watch_connectivity: ^0.2.8
   permission_handler: ^11.3.1
   
-  # 🍎 알림 및 로컬 알림 패키지
+  # 알림 및 로컬 알림 패키지
   audioplayers: ^5.2.1
   vibration: ^2.0.1
   flutter_local_notifications: ^17.2.2
 
-  # 🍎 소셜 로그인
+  # 소셜 로그인
   kakao_flutter_sdk_user: ^2.0.0+1
   flutter_naver_login: ^2.1.1
   google_sign_in: ^6.1.6  # 👈 버전 호환성을 위해 ^ 기호를 추가했습니다.
   
-  # 🍎 파이어베이스 (DB, 로그인 등)
+  # 파이어베이스 (DB, 로그인 등)
   firebase_core: ^3.1.1
   firebase_auth: ^5.1.1
   cloud_firestore: ^5.6.12

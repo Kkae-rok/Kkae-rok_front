@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const SplashScreen(), // 🍎 정호님이 만든 스플래시 정상 작동!
+      home: const SplashScreen(), 
     );
   }
 }
@@ -63,7 +63,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 🍎 아이폰에서 절대 깨지지 않도록 영문 패스로 바뀐 로고 이미지 배치
+            
             Image.asset('assets/logo.png', width: 400), 
             const SizedBox(height: 20),
             const Text(

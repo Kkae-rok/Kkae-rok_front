@@ -60,33 +60,27 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // 🍎 앱 라이프사이클 감지 (백그라운드 이동 및 종료 대응 수정)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 앱으로 다시 돌아왔을 때 날짜 체크 및 최신 데이터 로드
       _loadTimersFromDB(); 
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
-      // 🚨 [핵심 추가] 사용자가 홈 화면으로 나가거나 앱을 완전히 종료(킬)할 때 타이머를 강제로 멈추고 DB에 저장합니다.
       _stopAndSaveAllRunningTimers();
     }
   }
 
-  // 🚨 [새로 추가] 현재 작동 중인 모든 타이머를 중지하고 DB에 최종 시간을 즉시 저장하는 함수
   Future<void> _stopAndSaveAllRunningTimers() async {
-    bool isUpdated = false;
     for (var t in timers) {
       if (t.isRunning) {
-        t.baseSeconds = t.currentSeconds; // 지나간 시간 합산
+        t.baseSeconds = t.currentSeconds; 
         t.isRunning = false;
         t.startTime = null;
-        await _saveTimerToDB(t); // DB에 즉시 업데이트 완료할 때까지 대기(await)
-        isUpdated = true;
+        _saveTimerToDB(t); 
       }
     }
-    if (isUpdated && mounted) {
+    if (mounted) {
       setState(() {});
-      _manageGlobalTimer(); // 화면 UI 및 글로벌 초시계 타이머 정지
+      _manageGlobalTimer();
     }
   }
 
@@ -95,9 +89,27 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
+  DateTime? _safeParseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  int _safeParseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.toString()) ?? 0;
+    return 0;
+  }
+
+  String _safeParseString(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
+  }
+
   Future<void> _loadTimersFromDB() async {
     if (currentUser == null) return;
-
     setState(() => isLoading = true);
 
     try {
@@ -112,18 +124,25 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
       for (var doc in snapshot.docs) {
         var data = doc.data();
         
-        int seconds = data['seconds'] ?? 0;
-        String lastUpdatedDate = data['lastUpdatedDate'] ?? data['date'] ?? '';
+        int seconds = _safeParseInt(data['seconds']);
         
-        bool isRunning = data['isRunning'] ?? false;
-        DateTime? startTime;
-        if (data['startTime'] != null) {
-          startTime = DateTime.parse(data['startTime']);
+        // 💡 [수정됨] Null Safety 에러 완벽 차단!
+        String rawLast = _safeParseString(data['lastUpdatedDate']);
+        String lastUpdatedDate = rawLast.isEmpty ? _safeParseString(data['date']) : rawLast;
+        
+        bool isRunning = false;
+        if (data['isRunning'] != null) {
+          if (data['isRunning'] is bool) isRunning = data['isRunning'];
+          else if (data['isRunning'] is String) isRunning = data['isRunning'] == 'true';
         }
+
+        DateTime? startTime = _safeParseDate(data['startTime']);
+        DateTime? dailyStartTime = _safeParseDate(data['dailyStartTime']);
         
-        DateTime? dailyStartTime;
-        if (data['dailyStartTime'] != null) {
-          dailyStartTime = DateTime.parse(data['dailyStartTime']);
+        int colorValue = Colors.grey.value;
+        if (data['color'] != null) {
+          if (data['color'] is int) colorValue = data['color'];
+          else if (data['color'] is String) colorValue = int.tryParse(data['color'].toString()) ?? Colors.grey.value;
         }
 
         if (lastUpdatedDate.isNotEmpty && lastUpdatedDate != today && seconds > 0) {
@@ -133,7 +152,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
             'seconds': seconds,
             'date': lastUpdatedDate, 
             'dailyStartTime': data['dailyStartTime'], 
-            'color': data['color'],
+            'color': colorValue,
             'createdAt': FieldValue.serverTimestamp(),
           });
 
@@ -154,7 +173,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
         loadedTimers.add(TimerData(
           docId: doc.id,
           title: data['title'] ?? '이름 없음',
-          color: Color(data['color'] ?? Colors.grey.value),
+          color: Color(colorValue),
           baseSeconds: seconds,
           isRunning: isRunning,
           startTime: startTime,
@@ -168,7 +187,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
       });
       _manageGlobalTimer(); 
     } catch (e) {
-      print("데이터 불러오기 에러: $e");
+      debugPrint("데이터 불러오기 에러: $e");
       setState(() => isLoading = false);
     }
   }
@@ -181,8 +200,12 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
       
       if (docSnap.exists) {
         final data = docSnap.data();
-        String dbLastDate = data?['lastUpdatedDate'] ?? data?['date'] ?? '';
-        int dbSeconds = (data?['seconds'] ?? 0).toInt();
+        
+        // 💡 [수정됨] data? 접근 시 발생하는 조건문 Null 에러 완벽 차단!
+        String rawLast = _safeParseString(data?['lastUpdatedDate']);
+        String dbLastDate = rawLast.isEmpty ? _safeParseString(data?['date']) : rawLast;
+        
+        int dbSeconds = _safeParseInt(data?['seconds']);
 
         if (dbLastDate.isNotEmpty && dbLastDate != todayStr && dbSeconds > 0) {
           await FirebaseFirestore.instance.collection('study_history').add({
@@ -191,7 +214,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
             'seconds': dbSeconds,
             'date': dbLastDate, 
             'dailyStartTime': data?['dailyStartTime'],
-            'color': data?['color'],
+            'color': data?['color'] ?? timer.color.value,
             'createdAt': FieldValue.serverTimestamp(),
           });
 
@@ -213,7 +236,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
         'date': todayStr,
       });
     } catch (e) {
-      print("DB 저장 에러: $e");
+      debugPrint("DB 저장 에러: $e");
     }
   }
 
@@ -251,6 +274,11 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
     if (isAnyRunning && (_globalTimer == null || !_globalTimer!.isActive)) {
       _globalTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         setState(() {}); 
+        if (DateTime.now().second % 10 == 0) {
+           for (var t in timers) {
+             if (t.isRunning) _saveTimerToDB(t);
+           }
+        }
       });
     } else if (!isAnyRunning) {
       _globalTimer?.cancel();
@@ -281,7 +309,7 @@ class _RecordPageState extends State<RecordPage> with WidgetsBindingObserver {
         centerTitle: true,
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator()) 
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE57373))) 
           : Column(
               children: [
                 const SizedBox(height: 10),

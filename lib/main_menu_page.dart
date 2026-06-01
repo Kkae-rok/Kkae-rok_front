@@ -16,7 +16,7 @@ class MainMenuPage extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand, 
         children: [
-          // 1층: 시계 모양 워터마크 배경
+      
           Container(
             color: const Color(0xFFF8F9FA), 
             alignment: Alignment.center, 
@@ -29,7 +29,7 @@ class MainMenuPage extends StatelessWidget {
             ),
           ),
           
-          // 2층: 반투명 메인 메뉴 버튼들
+         
           SafeArea( 
             child: Center(
               child: Padding(
@@ -107,7 +107,7 @@ class MainMenuPage extends StatelessWidget {
     );
   }
 
-  // 🍎 투명도를 0.5(50%)로 확 낮춰서 뒤가 잘 비치게 수정!
+
   Widget _buildMenuCard(BuildContext context, {required String imagePath, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
@@ -115,7 +115,7 @@ class MainMenuPage extends StatelessWidget {
         width: 155, 
         height: 175, 
         decoration: BoxDecoration(
-          // 👇 이 숫자가 0.5로 변경되었습니다! (필요하면 0.3 처럼 더 낮추셔도 됩니다)
+         
           color: Colors.white.withOpacity(0.5), 
           borderRadius: BorderRadius.circular(30), 
           boxShadow: [

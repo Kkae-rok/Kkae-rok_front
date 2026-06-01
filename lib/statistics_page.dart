@@ -61,15 +61,30 @@ class _StatisticsPageState extends State<StatisticsPage> {
       
       void processDocs(QuerySnapshot snapshot) {
         for (var doc in snapshot.docs) {
-          var data = doc.data() as Map<String, dynamic>;
-          String dateKey = data['date'] ?? data['lastUpdatedDate'] ?? ''; 
+          var data = doc.data() as Map<String, dynamic>? ?? {};
           
+          // 💡 [핵심] DB의 날짜 포맷이 조금 달라도 완벽하게 yyyy-MM-dd로 맞춰주는 번역기
+          String rawDate = data['date']?.toString() ?? data['lastUpdatedDate']?.toString() ?? ''; 
+          String dateKey = rawDate;
+          
+          if (rawDate.contains('-')) {
+            var parts = rawDate.split('-');
+            if (parts.length >= 3) {
+              // '2026-5-31' 처럼 들어와도 무조건 '2026-05-31'로 변환
+              String y = parts[0];
+              String m = parts[1].padLeft(2, '0');
+              String d = parts[2].padLeft(2, '0');
+              dateKey = '$y-$m-$d';
+            }
+          }
+          
+          // 💡 [핵심] 초(seconds) 데이터도 문자든 숫자든 무조건 안전하게 변환
           int seconds = 0;
           if (data['seconds'] != null) {
             if (data['seconds'] is num) {
               seconds = (data['seconds'] as num).toInt();
-            } else if (data['seconds'] is String) {
-              seconds = int.tryParse(data['seconds']) ?? 0;
+            } else {
+              seconds = int.tryParse(data['seconds'].toString()) ?? 0;
             }
           }
           
@@ -388,7 +403,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             const TextSpan(text: ' 시간 ', style: TextStyle(fontSize: 16, color: Color(0xFFE57373), fontWeight: FontWeight.w500)),
             TextSpan(text: '$m', style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Color(0xFFE57373))),
             const TextSpan(text: ' 분 ', style: TextStyle(fontSize: 16, color: Color(0xFFE57373), fontWeight: FontWeight.w500)),
-            const TextSpan(text: '입니다!', style: TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500)),
+            const TextSpan(text: '이에요!', style: TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500)),
           ],
         ),
       );
@@ -576,15 +591,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 Color timeTextColor;
 
                 if (isDaySelected || isWeekSelected) {
-                  // 선택된 날짜는 여전히 강조색
-                  dayTextColor = const Color(0xFFE57373);
-                  timeTextColor = const Color(0xFFE57373);
+                  dayTextColor = const Color(0xFFC62828); // 더 진한 빨강으로 가독성 확보
+                  timeTextColor = const Color(0xFFC62828);
                 } else if (!isCurrentMonth) {
-                  // 지난달/다음달 날짜는 흐리게
                   dayTextColor = Colors.grey.shade300;
                   timeTextColor = Colors.transparent;
                 } else {
-                  // 💡 모든 날짜의 텍스트를 검은색/짙은 회색으로 통일!
                   dayTextColor = Colors.black87;
                   timeTextColor = Colors.black87;
                 }
@@ -723,18 +735,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
   Color _getHeatmapColor(int minutes) {
     if (minutes == 0) return Colors.transparent;
     
-    // 0~3시간 미만: 매우 연한 분홍
     if (minutes < 180) return const Color(0xFFFFEBEE); 
-    
-    // 3~6시간 미만: 연한 분홍
     if (minutes < 360) return const Color(0xFFFFCDD2); 
-    
-    // 6~9시간 미만: 중간 분홍 (조금 더 연하게)
     if (minutes < 540) return const Color(0xFFEF9A9A); 
-    
-    // 9~12시간 미만: 조금 더 진한 분홍 (기존보다 연하게)
     if (minutes < 720) return const Color(0xFFE57373); 
-    
     
     return const Color(0xFFEF5350); 
   }
